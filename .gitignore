@@ -1,0 +1,29 @@
+# Build output
+/Debug/
+/Release/
+*.bin
+*.elf
+*.map
+*.hex
+*.list
+
+# CubeIDE project settings
+.cproject
+.launches/
+/.ipc
+.build
+*.log
+
+# Backup and temp files
+*~
+*.swp
+*.bak
+*.tmp
+
+# IDE settings (optional)
+/.settings/
+.metadata/
+
+# OS-specific
+.DS_Store
+Thumbs.db
