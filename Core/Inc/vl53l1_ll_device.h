@@ -551,7 +551,7 @@ typedef uint8_t VL53L1_GPIO_Interrupt_Mode;
 #define VL53L1_GPIOINTMODE_IN_WINDOW \
 	((VL53L1_GPIO_Interrupt_Mode) 3)
 	/*!< Trigger interupt if value > thresh_low AND value < thresh_high */
-
+#define VL53L1_GPIOINTMODE_DISABLED ((VL53L1_GPIO_Interrupt_Mode)0xFF)
 /** @} end of VL53L1_GPIO_Interrupt_Mode_group */
 
 /** @defgroup VL53L1_TuningParms_group Tuning Parameters

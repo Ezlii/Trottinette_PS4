@@ -1,9 +1,9 @@
 /*
- * application.c
- *
- *  Created on: Apr 24, 2025
- *      Author: elias
- */
+* application.c
+*
+*  Created on: Apr 24, 2025
+*      Author: elias
+*/
 /*====================  INCLUDES  ====================*/
 #include  "application.h"
 #include "main.h"
@@ -49,6 +49,8 @@ static EventsBuffer_t myEventBuffer;
 static selected_Epreuve_t currentEpreuve;
 static uint32_t selected_height_cm;
 static char height_str[8];
+static volatile VL53L1_RangingMeasurementData_t RangingData;
+
 
 /*====================  STATIC FUNCTION PROTOTYPES  ====================*/
 
@@ -71,7 +73,7 @@ void application(void){
 	  dev.i2c_slave_address = 0x29;
 
 	  VL53L1_Error status;
-	  VL53L1_RangingMeasurementData_t RangingData;
+
 
 	  status = VL53L1_GetDeviceInfo(Dev, &deviceInfo);
 
@@ -94,33 +96,22 @@ void application(void){
 	         printf("StaticInit fehlgeschlagen\n");
 	     }
 
-	     VL53L1_SetDistanceMode(Dev, 2);  // 1 = Short, 2 = Long
+	     VL53L1_SetDistanceMode(Dev, VL53L1_DISTANCEMODE_LONG);  // 1 = Short, 2 = Long
 	     VL53L1_SetMeasurementTimingBudgetMicroSeconds(Dev, 50000); // z.B. 50 ms
+	     VL53L1_SetInterruptPolarity(Dev, VL53L1_DEVICEINTERRUPTPOLARITY_ACTIVE_LOW);
+	     VL53L1_set_GPIO_interrupt_config(
+	         Dev,
+	         VL53L1_GPIOINTMODE_DISABLED,   // intr_mode_distance
+	         VL53L1_GPIOINTMODE_DISABLED,   // intr_mode_rate
+	         1,            // interrupt bei neuer Messung
+	         0,                             // no target
+	         0,                             // combined mode
+	         0, 0, 0, 0                     // Schwellenwerte
+	     );
+	     //VL53L1_StartMeasurement(Dev);
 
 
-	     VL53L1_StartMeasurement(Dev);
 
-
-	     /*
-	     while (1)
-		 {
-			 // Hier gibt es KEIN CheckForDataReady – also direkt Daten abholen
-			 status = VL53L1_GetRangingMeasurementData(Dev, &RangingData);
-
-			 if (status == VL53L1_ERROR_NONE && RangingData.RangeStatus == 0) {
-				 printf("Distanz: %u mm\n", RangingData.RangeMilliMeter);
-			 } else {
-				 printf("Ungültige Messung (Status: %u)\n", RangingData.RangeStatus);
-			 }
-
-			 // Messung abschließen und neue starten
-			 VL53L1_ClearInterruptAndStartMeasurement(Dev);
-
-			 HAL_Delay(50);  // Warten bis nächste Messung fertig ist
-		 }
-
-
-		*/
 	     HAL_TIM_Base_Start_IT(&htim2);
 
 
@@ -204,12 +195,12 @@ static void handle_eEpreuve_1(FSM_States_t state, EventsTypes_t event) {
 		case eTimeTickElapsed_10ms:
 			break;
 		case eRotaryEncoder_moved_left:
-			selected_height_cm--;
+			selected_height_cm = (selected_height_cm > 1) ? selected_height_cm - 1 : 175;
 			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
 			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
 			break;
 		case eRotaryEncoder_moved_right:
-			selected_height_cm++;
+			selected_height_cm = (selected_height_cm < 175) ? selected_height_cm + 1 : 1;
 			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
 			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
 			break;
@@ -224,6 +215,7 @@ static void handle_eEpreuve_1(FSM_States_t state, EventsTypes_t event) {
 // === eEpreuve_1_ChargeEnergy ===
 static void handle_eEpreuve_1_ChargeEnergy_EntryFct(void) {
 	SH1106_ClearDisplay();
+	SH1106_WriteString_AllAtOnce(0, 0, "Charge Energy", FONT_6x8);
 }
 
 static void handle_eEpreuve_1_ChargeEnergy(FSM_States_t state, EventsTypes_t event) {
@@ -294,15 +286,15 @@ static void handle_eEpreuve_2(FSM_States_t state, EventsTypes_t event) {
 		case eTimeTickElapsed_10ms:
 			break;
 		case eRotaryEncoder_moved_left:
-					(selected_height_cm >= 25) ? selected_height_cm-- : 75 ;
-					snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-					SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
-					break;
-				case eRotaryEncoder_moved_right:
-					(selected_height_cm <= 75) ? selected_height_cm++ : 25;
-					snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-					SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
-					break;
+				selected_height_cm = (selected_height_cm > 25) ? selected_height_cm - 1 : 75;
+				snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
+				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+				break;
+		case eRotaryEncoder_moved_right:
+				selected_height_cm = (selected_height_cm < 75) ? selected_height_cm + 1 : 25;
+				snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
+				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+				break;
 		default:
 			break;
 	}
@@ -509,6 +501,14 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
     if (GPIO_Pin == Rotary_Encoder_SW_Pin){
     	EventsBuffer_addData(&myEventBuffer, eRotaryEncoder_pressed);
+    }
+
+    if (GPIO_Pin == ToF_interrupt_Pin){
+    	EventsBuffer_addData(&myEventBuffer, eNewDistanzValue);
+    	 // Messdaten holen
+    	 VL53L1_GetRangingMeasurementData(Dev, (VL53L1_RangingMeasurementData_t *) &RangingData);
+    	 // Interrupt quittieren + neue Messung starten
+    	 VL53L1_ClearInterruptAndStartMeasurement(Dev);
     }
 }
 
