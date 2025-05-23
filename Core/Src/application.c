@@ -49,7 +49,7 @@ static FSM_States_t myState = eTR_eStart;
 static EventsBuffer_t myEventBuffer;
 static selected_Epreuve_t currentEpreuve;
 static uint32_t selected_height_cm;
-static char height_str[8];
+static char height_str[15];
 static volatile VL53L1_RangingMeasurementData_t RangingData;
 static uint32_t duty_cycle_in_percent = 50;
 static uint16_t counter_30ms = 0;
@@ -267,12 +267,18 @@ static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsType
 				}
 				counter_30ms = 0;
 			}
-			HAL_GPIO_TogglePin(Test_10ms_delay_GPIO_Port, Test_10ms_delay_Pin);
-			break;
-			if(++counter_1s >= 100){
 
+			if(++counter_1s >= 100)
+			{
+				int16_t mm = RangingData.RangeMilliMeter;
+				int16_t cm_ganz = mm / 10;
+				int16_t cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
+				snprintf(height_str, sizeof(height_str), "%d.%d cm", cm_ganz, cm_nachkomma);
+				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
 				counter_1s = 0;
 			}
+			HAL_GPIO_TogglePin(Test_10ms_delay_GPIO_Port, Test_10ms_delay_Pin);
+			break;
 		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_1_StopLiftingProcess);
 			break;
