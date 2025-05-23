@@ -30,6 +30,7 @@ extern SPI_HandleTypeDef hspi1;
 extern I2C_HandleTypeDef hi2c3;
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim1;
+extern ADC_HandleTypeDef hadc1;
 
 /*====================  GLOBAL VARIABLES  ====================*/
 
@@ -54,7 +55,8 @@ static volatile VL53L1_RangingMeasurementData_t RangingData;
 static uint32_t duty_cycle_in_percent = 50;
 static uint16_t counter_30ms = 0;
 static uint16_t counter_1s = 0;
-
+static uint16_t adc_buffer[ADC_BUFFER_SIZE];
+static float voltage_condesator;
 
 /*====================  STATIC FUNCTION PROTOTYPES  ====================*/
 
@@ -121,6 +123,8 @@ void application(void){
 
 
 
+	 // Starten des DMA für die Spannungsmessung
+	 HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, ADC_BUFFER_SIZE);
 
 	 // Starten des Timers für die FSM
 	 HAL_TIM_Base_Start_IT(&htim2);
@@ -566,7 +570,18 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 }
 
 
-
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+    if (hadc->Instance == ADC1) {
+        //Buffer komplett gefüllt
+    	uint32_t sum = 0;
+		for (int i = 0; i < ADC_BUFFER_SIZE; i++)
+		{
+			sum += adc_buffer[i];
+		}
+		uint16_t avg = sum / ADC_BUFFER_SIZE;
+		voltage_condesator = (3.3f * avg) / 4095.0f;
+    }
+}
 
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)

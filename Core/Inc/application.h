@@ -17,6 +17,7 @@
 #define nullptr 0
 #define TICK_COUNT_10ms 10
 #define DUTY_CYCLE_0_Percent 0
+#define ADC_BUFFER_SIZE 16
 
 void application(void);
 
