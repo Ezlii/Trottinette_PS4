@@ -72,6 +72,8 @@ void Error_Handler(void);
 #define Activate_Display_GPIO_Port GPIOB
 #define Data_Command_Pin GPIO_PIN_9
 #define Data_Command_GPIO_Port GPIOB
+#define Test_10ms_delay_Pin GPIO_PIN_3
+#define Test_10ms_delay_GPIO_Port GPIOC
 #define Rotary_Encoder_SCK_Pin GPIO_PIN_2
 #define Rotary_Encoder_SCK_GPIO_Port GPIOA
 #define Rotary_Encoder_SCK_EXTI_IRQn EXTI2_IRQn

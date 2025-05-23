@@ -52,12 +52,15 @@ static uint32_t selected_height_cm;
 static char height_str[8];
 static volatile VL53L1_RangingMeasurementData_t RangingData;
 static uint32_t duty_cycle_in_percent = 50;
+static uint16_t counter_30ms = 0;
+static uint16_t counter_1s = 0;
 
 
 /*====================  STATIC FUNCTION PROTOTYPES  ====================*/
 
 static void tran(FSM_States_t newState);
 static void updateEpreuveDisplay(void);
+static void set_PWM_DutyCycle(uint32_t duty_cycle_in_percent);
 
 
 /*====================  FUNCTION DEFINITIONS  ====================*/
@@ -241,19 +244,37 @@ static void handle_eEpreuve_1_ChargeEnergy(FSM_States_t state, EventsTypes_t eve
 
 // === eEpreuve_1_StartLiftingProcess ===
 static void handle_eEpreuve_1_StartLiftingProcess_EntryFct(void) {
+	SH1106_ClearDisplay();
+	SH1106_WriteString_AllAtOnce(0, 0, "Lifting Process", FONT_6x8);
 	// Duty Cycle setzen (Buck langsam starten)
-	duty_cycle_in_percent = 0;
-	uint32_t period = htim1.Init.Period + 1;
-	uint32_t duty = (duty_cycle_in_percent * period) / 100;
-	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, duty);
+	set_PWM_DutyCycle(DUTY_CYCLE_0_Percent);
 	// Start PWM
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-
+	counter_1s = 0;
+	counter_30ms = 0;
+	duty_cycle_in_percent = 0;
 }
 
 static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
+			if(++counter_30ms >= 3)
+			{
+				if(duty_cycle_in_percent <= 100)
+				{
+					duty_cycle_in_percent += 1;
+					set_PWM_DutyCycle(duty_cycle_in_percent);
+				}
+				counter_30ms = 0;
+			}
+			HAL_GPIO_TogglePin(Test_10ms_delay_GPIO_Port, Test_10ms_delay_Pin);
+			break;
+			if(++counter_1s >= 100){
+
+				counter_1s = 0;
+			}
+		case eRotaryEncoder_pressed:
+			tran(eTR_eEpreuve_1_StopLiftingProcess);
 			break;
 		default:
 			break;
@@ -262,7 +283,10 @@ static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsType
 
 // === eEpreuve_1_StopLiftingProcess ===
 static void handle_eEpreuve_1_StopLiftingProcess_EntryFct(void) {
-
+	SH1106_ClearDisplay();
+	SH1106_WriteString_AllAtOnce(0, 0, "Stop Lifting", FONT_6x8);
+	// stoppen des pwm für den boost converter
+	HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
 }
 
 static void handle_eEpreuve_1_StopLiftingProcess(FSM_States_t state, EventsTypes_t event) {
@@ -462,10 +486,16 @@ static void updateEpreuveDisplay(void) {
 	SH1106_WriteString_AllAtOnce(0,6, (currentEpreuve == eEpreuve_3) ? "-> Epreuve 3" : "   Epreuve 3", FONT_6x8);
 }
 
+static void set_PWM_DutyCycle(uint32_t duty_cycle_in_percent){
+	uint32_t period = htim1.Init.Period + 1;
+	uint32_t duty = (duty_cycle_in_percent * period) / 100;
+	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, duty);
+}
 
-//
-// Interrupts
-//¨
+
+// --------------------------------------------------------------
+// ------------------- Interrupts -------------------------------
+// --------------------------------------------------------------
 
 // Callback-Funktion (von HAL automatisch aufgerufen)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)

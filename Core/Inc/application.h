@@ -16,6 +16,7 @@
 #define SW_PRESSED 0
 #define nullptr 0
 #define TICK_COUNT_10ms 10
+#define DUTY_CYCLE_0_Percent 0
 
 void application(void);
 
