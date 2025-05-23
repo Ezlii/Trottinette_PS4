@@ -29,6 +29,7 @@ extern COM_InitTypeDef BspCOMInit;
 extern SPI_HandleTypeDef hspi1;
 extern I2C_HandleTypeDef hi2c3;
 extern TIM_HandleTypeDef htim2;
+extern TIM_HandleTypeDef htim1;
 
 /*====================  GLOBAL VARIABLES  ====================*/
 
@@ -50,6 +51,7 @@ static selected_Epreuve_t currentEpreuve;
 static uint32_t selected_height_cm;
 static char height_str[8];
 static volatile VL53L1_RangingMeasurementData_t RangingData;
+static uint32_t duty_cycle_in_percent = 50;
 
 
 /*====================  STATIC FUNCTION PROTOTYPES  ====================*/
@@ -72,47 +74,53 @@ void application(void){
 
 	  dev.i2c_slave_address = 0x29;
 
-	  VL53L1_Error status;
 
 
-	  status = VL53L1_GetDeviceInfo(Dev, &deviceInfo);
-
-	     if (status == VL53L1_ERROR_NONE) {
-	    	 // connection success
-	    	 printf("Connection success\n");
-	     } else {
-	    	// no connection
-	    	 printf("No connection\n");
-	     }
-
-	     // Sensor initialisieren
-	     status = VL53L1_DataInit(Dev);
-	     if (status != VL53L1_ERROR_NONE) {
-	         printf("DataInit fehlgeschlagen\n");
-	     }
-
-	     status = VL53L1_StaticInit(Dev);   // Initialisiert die Register des Sensors
-	     if (status != VL53L1_ERROR_NONE) {
-	         printf("StaticInit fehlgeschlagen\n");
-	     }
-
-	     VL53L1_SetDistanceMode(Dev, VL53L1_DISTANCEMODE_LONG);  // 1 = Short, 2 = Long
-	     VL53L1_SetMeasurementTimingBudgetMicroSeconds(Dev, 50000); // z.B. 50 ms
-	     VL53L1_SetInterruptPolarity(Dev, VL53L1_DEVICEINTERRUPTPOLARITY_ACTIVE_LOW);
-	     VL53L1_set_GPIO_interrupt_config(
-	         Dev,
-	         VL53L1_GPIOINTMODE_DISABLED,   // intr_mode_distance
-	         VL53L1_GPIOINTMODE_DISABLED,   // intr_mode_rate
-	         1,            // interrupt bei neuer Messung
-	         0,                             // no target
-	         0,                             // combined mode
-	         0, 0, 0, 0                     // Schwellenwerte
-	     );
-	     //VL53L1_StartMeasurement(Dev);
+	 VL53L1_Error status;
 
 
+	 status = VL53L1_GetDeviceInfo(Dev, &deviceInfo);
 
-	     HAL_TIM_Base_Start_IT(&htim2);
+	 if (status == VL53L1_ERROR_NONE) {
+		 // connection success
+		 printf("Connection success\n");
+	 } else {
+		// no connection
+		 printf("No connection\n");
+	 }
+
+	 // Sensor initialisieren
+	 status = VL53L1_DataInit(Dev);
+	 if (status != VL53L1_ERROR_NONE) {
+		 printf("DataInit fehlgeschlagen\n");
+	 }
+
+	 status = VL53L1_StaticInit(Dev);   // Initialisiert die Register des Sensors
+	 if (status != VL53L1_ERROR_NONE) {
+		 printf("StaticInit fehlgeschlagen\n");
+	 }
+
+	 VL53L1_SetDistanceMode(Dev, VL53L1_DISTANCEMODE_LONG);  // 1 = Short, 2 = Long
+	 VL53L1_SetMeasurementTimingBudgetMicroSeconds(Dev, 50000); // z.B. 50 ms
+	 VL53L1_SetInterruptPolarity(Dev, VL53L1_DEVICEINTERRUPTPOLARITY_ACTIVE_LOW);
+	 VL53L1_set_GPIO_interrupt_config(
+		 Dev,
+		 VL53L1_GPIOINTMODE_DISABLED,   // intr_mode_distance
+		 VL53L1_GPIOINTMODE_DISABLED,   // intr_mode_rate
+		 1,            // interrupt bei neuer Messung
+		 0,                             // no target
+		 0,                             // combined mode
+		 0, 0, 0, 0                     // Schwellenwerte
+	 );
+	 VL53L1_StartMeasurement(Dev);
+	 //VL53L1_StopMeasurement(Dev);
+
+
+
+
+
+	 // Starten des Timers für die FSM
+	 HAL_TIM_Base_Start_IT(&htim2);
 
 
 	  while(1){
@@ -121,6 +129,7 @@ void application(void){
 		  // Event Producer
 
 		  // Event Consumer
+
 		  TrotinettControlTask(&myEventBuffer);
 	  }
 }
@@ -232,6 +241,13 @@ static void handle_eEpreuve_1_ChargeEnergy(FSM_States_t state, EventsTypes_t eve
 
 // === eEpreuve_1_StartLiftingProcess ===
 static void handle_eEpreuve_1_StartLiftingProcess_EntryFct(void) {
+	// Duty Cycle setzen (Buck langsam starten)
+	duty_cycle_in_percent = 0;
+	uint32_t period = htim1.Init.Period + 1;
+	uint32_t duty = (duty_cycle_in_percent * period) / 100;
+	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, duty);
+	// Start PWM
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
 
 }
 
@@ -509,6 +525,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     	 VL53L1_GetRangingMeasurementData(Dev, (VL53L1_RangingMeasurementData_t *) &RangingData);
     	 // Interrupt quittieren + neue Messung starten
     	 VL53L1_ClearInterruptAndStartMeasurement(Dev);
+    	 BSP_LED_Toggle(LED_BLUE);
     }
 }
 
