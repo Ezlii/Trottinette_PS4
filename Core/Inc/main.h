@@ -83,6 +83,9 @@ void Error_Handler(void);
 #define Rotary_Encoder_SW_Pin GPIO_PIN_5
 #define Rotary_Encoder_SW_GPIO_Port GPIOC
 #define Rotary_Encoder_SW_EXTI_IRQn EXTI9_5_IRQn
+#define Button_Start_Lifting_Pin GPIO_PIN_12
+#define Button_Start_Lifting_GPIO_Port GPIOB
+#define Button_Start_Lifting_EXTI_IRQn EXTI15_10_IRQn
 #define ToF_interrupt_Pin GPIO_PIN_6
 #define ToF_interrupt_GPIO_Port GPIOC
 #define ToF_interrupt_EXTI_IRQn EXTI9_5_IRQn

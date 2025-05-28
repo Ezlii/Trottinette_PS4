@@ -16,6 +16,8 @@
 #define SW_PRESSED 0
 #define nullptr 0
 #define TICK_COUNT_10ms 10
+#define TICK_COUNT_30ms 3
+#define TICK_COUNT_50ms 5
 #define DUTY_CYCLE_0_Percent 0
 #define ADC_BUFFER_SIZE 16
 

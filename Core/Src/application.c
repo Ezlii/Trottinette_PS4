@@ -12,6 +12,7 @@
 #include "vl53l1_platform.h"
 #include "FSM_Handler.h"
 #include "EventsManagement.h"
+#include <stdbool.h>
 
 /*====================  TYPEDEFS & ENUMS  ====================*/
 
@@ -55,14 +56,17 @@ static volatile VL53L1_RangingMeasurementData_t RangingData;
 static uint32_t duty_cycle_in_percent = 50;
 static uint16_t counter_30ms = 0;
 static uint16_t counter_1s = 0;
+static uint16_t counter_50ms = 0;
 static uint16_t adc_buffer[ADC_BUFFER_SIZE];
 static float voltage_condesator;
+static uint8_t rotary_encoder_last_state;
 
 /*====================  STATIC FUNCTION PROTOTYPES  ====================*/
 
 static void tran(FSM_States_t newState);
 static void updateEpreuveDisplay(void);
 static void set_PWM_DutyCycle(uint32_t duty_cycle_in_percent);
+static void RotaryEncoder_Init(void);
 
 
 /*====================  FUNCTION DEFINITIONS  ====================*/
@@ -76,6 +80,7 @@ static void set_PWM_DutyCycle(uint32_t duty_cycle_in_percent);
 void application(void){
 	  Display_Initialize();
 	  SH1106_Clear();
+	  RotaryEncoder_Init();
 
 	  dev.i2c_slave_address = 0x29;
 
@@ -124,7 +129,9 @@ void application(void){
 
 
 	 // Starten des DMA für die Spannungsmessung
-	 HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, ADC_BUFFER_SIZE);
+	 if (HAL_ADC_GetState(&hadc1) == HAL_ADC_STATE_READY) {
+	     HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, ADC_BUFFER_SIZE);
+	 }
 
 	 // Starten des Timers für die FSM
 	 HAL_TIM_Base_Start_IT(&htim2);
@@ -232,11 +239,19 @@ static void handle_eEpreuve_1(FSM_States_t state, EventsTypes_t event) {
 static void handle_eEpreuve_1_ChargeEnergy_EntryFct(void) {
 	SH1106_ClearDisplay();
 	SH1106_WriteString_AllAtOnce(0, 0, "Charge Energy", FONT_6x8);
+	counter_50ms = 0;
 }
 
 static void handle_eEpreuve_1_ChargeEnergy(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
+			if(++counter_50ms >= TICK_COUNT_50ms){
+				// Starten des DMA für die Spannungsmessung
+				if (HAL_ADC_GetState(&hadc1) == HAL_ADC_STATE_READY) {
+					HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, ADC_BUFFER_SIZE);
+				}
+				counter_50ms = 0;
+			}
 			break;
 		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_1_StartLiftingProcess);
@@ -262,7 +277,7 @@ static void handle_eEpreuve_1_StartLiftingProcess_EntryFct(void) {
 static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
-			if(++counter_30ms >= 3)
+			if(++counter_30ms >= TICK_COUNT_30ms)
 			{
 				if(duty_cycle_in_percent <= 100)
 				{
@@ -502,6 +517,13 @@ static void set_PWM_DutyCycle(uint32_t duty_cycle_in_percent){
 	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, duty);
 }
 
+static void RotaryEncoder_Init(void)
+{
+    uint8_t clk = HAL_GPIO_ReadPin(Rotary_Encoder_SCK_GPIO_Port, Rotary_Encoder_SCK_Pin);
+    uint8_t dt  = HAL_GPIO_ReadPin(Rotary_Encoder_DT_GPIO_Port, Rotary_Encoder_DT_Pin);
+    rotary_encoder_last_state = (clk << 1) | dt;
+}
+
 
 // --------------------------------------------------------------
 // ------------------- Interrupts -------------------------------
@@ -510,15 +532,12 @@ static void set_PWM_DutyCycle(uint32_t duty_cycle_in_percent){
 // Callback-Funktion (von HAL automatisch aufgerufen)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    static uint8_t last_state = 0;
-    static int8_t step_accumulator = 0;
-    static int8_t last_delta = 0;
+
 
     if (GPIO_Pin == Rotary_Encoder_SCK_Pin || GPIO_Pin == Rotary_Encoder_DT_Pin)
     {
     	uint8_t clk = HAL_GPIO_ReadPin(Rotary_Encoder_SCK_GPIO_Port, Rotary_Encoder_SCK_Pin);
         uint8_t dt  = HAL_GPIO_ReadPin(Rotary_Encoder_DT_GPIO_Port,  Rotary_Encoder_DT_Pin);
-
         uint8_t new_state = (clk << 1) | dt;
 
         static const int8_t transition_table[4][4] = {
@@ -527,6 +546,17 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
             { -1,   0,  0,   1 },
             {  0,   1, -1,   0 }
         };
+
+
+        static uint8_t last_state;
+		static bool initialized = false;
+		static int8_t step_accumulator = 0;
+		static int8_t last_delta = 0;
+
+		if (!initialized) {
+			last_state = rotary_encoder_last_state;  // richtige Startposition
+			initialized = true;
+		}
 
         int8_t delta = transition_table[last_state][new_state];
 
@@ -565,13 +595,14 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     	 VL53L1_GetRangingMeasurementData(Dev, (VL53L1_RangingMeasurementData_t *) &RangingData);
     	 // Interrupt quittieren + neue Messung starten
     	 VL53L1_ClearInterruptAndStartMeasurement(Dev);
-    	 BSP_LED_Toggle(LED_BLUE);
+    	 //BSP_LED_Toggle(LED_BLUE);
     }
 }
 
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
     if (hadc->Instance == ADC1) {
+    	BSP_LED_Toggle(LED_BLUE);
         //Buffer komplett gefüllt
     	uint32_t sum = 0;
 		for (int i = 0; i < ADC_BUFFER_SIZE; i++)
@@ -580,6 +611,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 		}
 		uint16_t avg = sum / ADC_BUFFER_SIZE;
 		voltage_condesator = (3.3f * avg) / 4095.0f;
+		EventsBuffer_addData(&myEventBuffer, eNewVoltagemeasured);
     }
 }
 
