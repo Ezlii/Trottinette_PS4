@@ -335,7 +335,9 @@ void EXTI15_10_IRQHandler(void)
   /* USER CODE BEGIN EXTI15_10_IRQn 0 */
 
   /* USER CODE END EXTI15_10_IRQn 0 */
+  HAL_GPIO_EXTI_IRQHandler(Button_Stop_Pin);
   HAL_GPIO_EXTI_IRQHandler(Button_Start_Lifting_Pin);
+  HAL_GPIO_EXTI_IRQHandler(Button_Start_Descent_Pin);
   /* USER CODE BEGIN EXTI15_10_IRQn 1 */
 
   /* USER CODE END EXTI15_10_IRQn 1 */

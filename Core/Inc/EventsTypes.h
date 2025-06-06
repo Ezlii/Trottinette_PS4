@@ -9,9 +9,9 @@
 #define INC_EVENTSTYPES_H_
 
 typedef enum{
-	eButton_1_pressed,
-	eButton_2_pressed,
-	eButton_3_pressed,
+	eButton_start_lifting_pressed,
+	eButton_start_descent_pressed,
+	eButton_stop_lifting_pressed,
 	eRotaryEncoder_pressed,
 	eRotaryEncoder_moved_right,
 	eRotaryEncoder_moved_left,

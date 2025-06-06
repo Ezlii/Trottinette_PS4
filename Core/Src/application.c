@@ -245,13 +245,13 @@ static void handle_eEpreuve_1_ChargeEnergy_EntryFct(void) {
 static void handle_eEpreuve_1_ChargeEnergy(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
-			if(++counter_50ms >= TICK_COUNT_50ms){
+			/*if(++counter_50ms >= TICK_COUNT_50ms){
 				// Starten des DMA für die Spannungsmessung
 				if (HAL_ADC_GetState(&hadc1) == HAL_ADC_STATE_READY) {
 					HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, ADC_BUFFER_SIZE);
 				}
 				counter_50ms = 0;
-			}
+			}*/
 			break;
 		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_1_StartLiftingProcess);
@@ -299,6 +299,9 @@ static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsType
 			HAL_GPIO_TogglePin(Test_10ms_delay_GPIO_Port, Test_10ms_delay_Pin);
 			break;
 		case eRotaryEncoder_pressed:
+			tran(eTR_eEpreuve_1_StopLiftingProcess);
+			break;
+		case eButton_stop_lifting_pressed:
 			tran(eTR_eEpreuve_1_StopLiftingProcess);
 			break;
 		default:
@@ -351,15 +354,15 @@ static void handle_eEpreuve_2(FSM_States_t state, EventsTypes_t event) {
 		case eTimeTickElapsed_10ms:
 			break;
 		case eRotaryEncoder_moved_left:
-				selected_height_cm = (selected_height_cm > 25) ? selected_height_cm - 1 : 75;
-				snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
-				break;
+			selected_height_cm = (selected_height_cm > 25) ? selected_height_cm - 1 : 75;
+			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
+			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+			break;
 		case eRotaryEncoder_moved_right:
-				selected_height_cm = (selected_height_cm < 75) ? selected_height_cm + 1 : 25;
-				snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
-				break;
+			selected_height_cm = (selected_height_cm < 75) ? selected_height_cm + 1 : 25;
+			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
+			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+			break;
 		default:
 			break;
 	}
@@ -367,12 +370,30 @@ static void handle_eEpreuve_2(FSM_States_t state, EventsTypes_t event) {
 
 // === eEpreuve_3 ===
 static void handle_eEpreuve_3_EntryFct(void) {
-
+	selected_height_cm = 125;
+	SH1106_ClearDisplay();
+	SH1106_WriteString_AllAtOnce(0, 0, "Epreuve 3", FONT_6x8);
+	SH1106_WriteString_AllAtOnce(0, 2, "select height in cm:", FONT_6x8);
+	snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
+	SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 }
 
 static void handle_eEpreuve_3(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
+			break;
+		case eRotaryEncoder_moved_left:
+			selected_height_cm = (selected_height_cm > 125) ? selected_height_cm - 1 : 170;
+			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
+			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+			break;
+		case eRotaryEncoder_moved_right:
+			selected_height_cm = (selected_height_cm < 170) ? selected_height_cm + 1 : 125;
+			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
+			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+			break;
+		case eRotaryEncoder_pressed:
+			tran(eTR_eEpreuve_3_ChargeEnergy);
 			break;
 		default:
 			break;
@@ -381,12 +402,19 @@ static void handle_eEpreuve_3(FSM_States_t state, EventsTypes_t event) {
 
 // === eEpreuve_3_ChargeEnergy ===
 static void handle_eEpreuve_3_ChargeEnergy_EntryFct(void) {
-
+	SH1106_ClearDisplay();
+	SH1106_WriteString_AllAtOnce(0, 0, "Charge Energy", FONT_6x8);
 }
 
 static void handle_eEpreuve_3_ChargeEnergy(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
+			break;
+		case eRotaryEncoder_pressed:
+			tran(eTR_eEpreuve_3_StartLiftingProcess);
+			break;
+		case eButton_start_lifting_pressed:
+			tran(eTR_eEpreuve_3_StartLiftingProcess);
 			break;
 		default:
 			break;
@@ -395,12 +423,45 @@ static void handle_eEpreuve_3_ChargeEnergy(FSM_States_t state, EventsTypes_t eve
 
 // === eEpreuve_3_StartLiftingProcess ===
 static void handle_eEpreuve_3_StartLiftingProcess_EntryFct(void) {
-
+	SH1106_ClearDisplay();
+	SH1106_WriteString_AllAtOnce(0, 0, "Lifting Process", FONT_6x8);
+	// Duty Cycle setzen (Buck langsam starten)
+	set_PWM_DutyCycle(DUTY_CYCLE_0_Percent);
+	// Start PWM
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+	counter_1s = 0;
+	counter_30ms = 0;
+	duty_cycle_in_percent = 0;
 }
 
 static void handle_eEpreuve_3_StartLiftingProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
+			if(++counter_30ms >= TICK_COUNT_30ms)
+			{
+				if(duty_cycle_in_percent <= 100)
+				{
+					duty_cycle_in_percent += 1;
+					set_PWM_DutyCycle(duty_cycle_in_percent);
+				}
+				counter_30ms = 0;
+			}
+
+			if(++counter_1s >= 100)
+			{
+				int16_t mm = RangingData.RangeMilliMeter;
+				int16_t cm_ganz = mm / 10;
+				int16_t cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
+				snprintf(height_str, sizeof(height_str), "%d.%d cm", cm_ganz, cm_nachkomma);
+				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+				counter_1s = 0;
+			}
+			break;
+		case eRotaryEncoder_pressed:
+			tran(eTR_eEpreuve_3_StopLiftingProcess);
+			break;
+		case eButton_start_lifting_pressed:
+			tran(eTR_eEpreuve_3_StopLiftingProcess);
 			break;
 		default:
 			break;
@@ -409,7 +470,10 @@ static void handle_eEpreuve_3_StartLiftingProcess(FSM_States_t state, EventsType
 
 // === eEpreuve_3_StopLiftingProcess ===
 static void handle_eEpreuve_3_StopLiftingProcess_EntryFct(void) {
-
+	SH1106_ClearDisplay();
+	SH1106_WriteString_AllAtOnce(0, 0, "Stop Lifting", FONT_6x8);
+	// stoppen des pwm für den boost converter
+	HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
 }
 
 static void handle_eEpreuve_3_StopLiftingProcess(FSM_States_t state, EventsTypes_t event) {
@@ -597,6 +661,19 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     	 VL53L1_ClearInterruptAndStartMeasurement(Dev);
     	 //BSP_LED_Toggle(LED_BLUE);
     }
+
+    if (GPIO_Pin == Button_Stop_Pin){
+    	EventsBuffer_addData(&myEventBuffer, eButton_stop_lifting_pressed);
+    }
+
+    if (GPIO_Pin == Button_Start_Lifting_Pin){
+		EventsBuffer_addData(&myEventBuffer, eButton_start_lifting_pressed);
+    }
+
+    if (GPIO_Pin == Button_Start_Descent_Pin){
+    	EventsBuffer_addData(&myEventBuffer, eButton_start_descent_pressed);
+	}
+
 }
 
 

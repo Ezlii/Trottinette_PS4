@@ -549,11 +549,17 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : Button_Start_Lifting_Pin */
-  GPIO_InitStruct.Pin = Button_Start_Lifting_Pin;
+  /*Configure GPIO pins : Button_Start_Lifting_Pin Button_Start_Descent_Pin */
+  GPIO_InitStruct.Pin = Button_Start_Lifting_Pin|Button_Start_Descent_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(Button_Start_Lifting_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : Button_Stop_Pin */
+  GPIO_InitStruct.Pin = Button_Stop_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(Button_Stop_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : USB_DM_Pin USB_DP_Pin */
   GPIO_InitStruct.Pin = USB_DM_Pin|USB_DP_Pin;

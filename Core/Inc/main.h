@@ -86,9 +86,15 @@ void Error_Handler(void);
 #define Button_Start_Lifting_Pin GPIO_PIN_12
 #define Button_Start_Lifting_GPIO_Port GPIOB
 #define Button_Start_Lifting_EXTI_IRQn EXTI15_10_IRQn
+#define Button_Start_Descent_Pin GPIO_PIN_14
+#define Button_Start_Descent_GPIO_Port GPIOB
+#define Button_Start_Descent_EXTI_IRQn EXTI15_10_IRQn
 #define ToF_interrupt_Pin GPIO_PIN_6
 #define ToF_interrupt_GPIO_Port GPIOC
 #define ToF_interrupt_EXTI_IRQn EXTI9_5_IRQn
+#define Button_Stop_Pin GPIO_PIN_10
+#define Button_Stop_GPIO_Port GPIOA
+#define Button_Stop_EXTI_IRQn EXTI15_10_IRQn
 #define USB_DM_Pin GPIO_PIN_11
 #define USB_DM_GPIO_Port GPIOA
 #define USB_DP_Pin GPIO_PIN_12
