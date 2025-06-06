@@ -69,11 +69,6 @@ static void set_PWM_DutyCycle(uint32_t duty_cycle_in_percent);
 static void RotaryEncoder_Init(void);
 
 
-/*====================  FUNCTION DEFINITIONS  ====================*/
-// (Hier würden dann die Funktionsdefinitionen folgen)
-
-
-
 
 
 
@@ -208,9 +203,14 @@ static void handle_eSelectEpreuve(FSM_States_t state, EventsTypes_t event) {
 static void handle_eEpreuve_1_EntryFct(void) {
 	selected_height_cm = 100;
 	SH1106_ClearDisplay();
-	SH1106_WriteString_AllAtOnce(0, 0, "select height in cm:", FONT_6x8);
+	if (currentEpreuve == eEpreuve_1){
+		SH1106_WriteString_AllAtOnce(0, 0, "Epreuve 1", FONT_6x8);
+	} else if(currentEpreuve == eEpreuve_2){
+		SH1106_WriteString_AllAtOnce(0, 0, "Epreuve 2", FONT_6x8);
+	}
+	SH1106_WriteString_AllAtOnce(0, 2, "select height in cm:", FONT_6x8);
 	snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-	SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+	SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 }
 
 static void handle_eEpreuve_1(FSM_States_t state, EventsTypes_t event) {
@@ -296,7 +296,6 @@ static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsType
 				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
 				counter_1s = 0;
 			}
-			HAL_GPIO_TogglePin(Test_10ms_delay_GPIO_Port, Test_10ms_delay_Pin);
 			break;
 		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_1_StopLiftingProcess);
@@ -315,11 +314,16 @@ static void handle_eEpreuve_1_StopLiftingProcess_EntryFct(void) {
 	SH1106_WriteString_AllAtOnce(0, 0, "Stop Lifting", FONT_6x8);
 	// stoppen des pwm für den boost converter
 	HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
+	// actionneru schliessen -> stoppen der Masse
+	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, true);
 }
 
 static void handle_eEpreuve_1_StopLiftingProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
+			break;
+		case eButton_start_descent_pressed:
+			tran(eTR_eEpreuve_1_LowerProcess);
 			break;
 		default:
 			break;
@@ -328,12 +332,25 @@ static void handle_eEpreuve_1_StopLiftingProcess(FSM_States_t state, EventsTypes
 
 // === eEpreuve_1_LowerProcess ===
 static void handle_eEpreuve_1_LowerProcess_EntryFct(void) {
-
+	// actionneru öffen -> Masse herunterlassen
+	HAL_GPIO_WritePin(Actionneur_Left_GPIO_Port, Actionneur_Left_Pin, true);
+	counter_1s = 0;
 }
 
 static void handle_eEpreuve_1_LowerProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
+			if(++counter_1s >= 100){
+				int16_t mm = RangingData.RangeMilliMeter;
+				int16_t cm_ganz = mm / 10;
+				int16_t cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
+				snprintf(height_str, sizeof(height_str), "%d.%d cm", cm_ganz, cm_nachkomma);
+				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+				counter_1s = 0;
+				}
+			break;
+		case eRotaryEncoder_pressed:
+			tran(eTR_eSelectEpreuve);
 			break;
 		default:
 			break;
@@ -363,6 +380,8 @@ static void handle_eEpreuve_2(FSM_States_t state, EventsTypes_t event) {
 			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
 			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
 			break;
+		case eRotaryEncoder_pressed:
+			tran(eTR_eEpreuve_1_ChargeEnergy);
 		default:
 			break;
 	}
@@ -474,11 +493,19 @@ static void handle_eEpreuve_3_StopLiftingProcess_EntryFct(void) {
 	SH1106_WriteString_AllAtOnce(0, 0, "Stop Lifting", FONT_6x8);
 	// stoppen des pwm für den boost converter
 	HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
+	// actionneru schliessen -> stoppen der Masse
+	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, true);
 }
 
 static void handle_eEpreuve_3_StopLiftingProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
+			break;
+		case eButton_stop_lifting_pressed:
+
+			break;
+		case eButton_start_descent_pressed:
+			tran(eTR_eEpreuve_3_LowerProcess);
 			break;
 		default:
 			break;
@@ -513,6 +540,26 @@ static void handle_eEpreuve_3_EndofTime(FSM_States_t state, EventsTypes_t event)
 	}
 }
 
+// === eEpreuve_3_LowerProcessEndofTime ===
+static void handle_eEpreuve_3_LowerProcessEndOfTime_EntryFct(void) {
+	SH1106_ClearDisplay();
+	SH1106_WriteString_AllAtOnce(0, 0, "Stop Lifting", FONT_6x8);
+	// actionneru schliessen -> stoppen der Masse
+	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, true);
+}
+
+static void handle_eEpreuve_3_LowerProcessEndOfTime(FSM_States_t state, EventsTypes_t event) {
+	switch(event){
+		case eTimeTickElapsed_10ms:
+			break;
+		case eRotaryEncoder_pressed:
+			tran(eTR_eSelectEpreuve);
+			break;
+		default:
+			break;
+	}
+}
+
 
 static const FSM_State_Handler_t FSM_State_Handler[eNbrOfFSMStates] =
 {
@@ -529,7 +576,8 @@ static const FSM_State_Handler_t FSM_State_Handler[eNbrOfFSMStates] =
     {eTR_eEpreuve_3_StartLiftingProcess, handle_eEpreuve_3_StartLiftingProcess_EntryFct, handle_eEpreuve_3_StartLiftingProcess, nullptr},
     {eTR_eEpreuve_3_StopLiftingProcess, handle_eEpreuve_3_StopLiftingProcess_EntryFct, handle_eEpreuve_3_StopLiftingProcess, nullptr},
     {eTR_eEpreuve_3_LowerProcess, handle_eEpreuve_3_LowerProcess_EntryFct, handle_eEpreuve_3_LowerProcess, nullptr},
-    {eTR_eEpreuve_3_EndofTime, handle_eEpreuve_3_EndofTime_EntryFct, handle_eEpreuve_3_EndofTime, nullptr}
+    {eTR_eEpreuve_3_EndofTime, handle_eEpreuve_3_EndofTime_EntryFct, handle_eEpreuve_3_EndofTime, nullptr},
+    {eTR_eEpreuve_3_LowerProcessEndOfTime, handle_eEpreuve_3_LowerProcessEndOfTime_EntryFct, handle_eEpreuve_3_LowerProcessEndOfTime, nullptr}
 };
 
 

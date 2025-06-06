@@ -25,6 +25,7 @@ typedef enum {
 	eTR_eEpreuve_3_StopLiftingProcess,
 	eTR_eEpreuve_3_LowerProcess,
 	eTR_eEpreuve_3_EndofTime,
+	eTR_eEpreuve_3_LowerProcessEndOfTime,
 	eNbrOfFSMStates
 } FSM_States_t;
 

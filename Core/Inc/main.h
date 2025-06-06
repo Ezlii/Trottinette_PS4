@@ -72,8 +72,12 @@ void Error_Handler(void);
 #define Activate_Display_GPIO_Port GPIOB
 #define Data_Command_Pin GPIO_PIN_9
 #define Data_Command_GPIO_Port GPIOB
-#define Test_10ms_delay_Pin GPIO_PIN_3
-#define Test_10ms_delay_GPIO_Port GPIOC
+#define Relay_On_Pin GPIO_PIN_3
+#define Relay_On_GPIO_Port GPIOC
+#define Relay_Off_Pin GPIO_PIN_0
+#define Relay_Off_GPIO_Port GPIOA
+#define Actionneur_Right_Pin GPIO_PIN_1
+#define Actionneur_Right_GPIO_Port GPIOA
 #define Rotary_Encoder_SCK_Pin GPIO_PIN_2
 #define Rotary_Encoder_SCK_GPIO_Port GPIOA
 #define Rotary_Encoder_SCK_EXTI_IRQn EXTI2_IRQn
@@ -103,6 +107,8 @@ void Error_Handler(void);
 #define JTMS_GPIO_Port GPIOA
 #define JTCK_Pin GPIO_PIN_14
 #define JTCK_GPIO_Port GPIOA
+#define Actionneur_Left_Pin GPIO_PIN_10
+#define Actionneur_Left_GPIO_Port GPIOC
 #define JTDO_Pin GPIO_PIN_3
 #define JTDO_GPIO_Port GPIOB
 
