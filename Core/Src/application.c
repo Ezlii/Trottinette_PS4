@@ -10,6 +10,7 @@
 #include "display.h"
 #include "vl53l1_api.h"
 #include "vl53l1_platform.h"
+#include "vl53l1_core.h"
 #include "FSM_Handler.h"
 #include "EventsManagement.h"
 #include <stdbool.h>
@@ -57,9 +58,13 @@ static uint32_t duty_cycle_in_percent = 50;
 static uint16_t counter_30ms = 0;
 static uint16_t counter_1s = 0;
 static uint16_t counter_50ms = 0;
+static uint16_t counter_200ms = 0;
 static uint16_t adc_buffer[ADC_BUFFER_SIZE];
 static float voltage_condesator;
 static uint8_t rotary_encoder_last_state;
+static uint16_t Schwellwert = 50;
+static uint32_t last_button_press_tick = 0;
+
 
 /*====================  STATIC FUNCTION PROTOTYPES  ====================*/
 
@@ -111,7 +116,7 @@ void application(void){
 	 VL53L1_set_GPIO_interrupt_config(
 		 Dev,
 		 VL53L1_GPIOINTMODE_DISABLED,   // intr_mode_distance
-		 VL53L1_GPIOINTMODE_DISABLED,   // intr_mode_rate
+		 VL53L1_GPIOINTMODE_DISABLED,   // intr_mode_ratec
 		 1,            // interrupt bei neuer Messung
 		 0,                             // no target
 		 0,                             // combined mode
@@ -256,6 +261,9 @@ static void handle_eEpreuve_1_ChargeEnergy(FSM_States_t state, EventsTypes_t eve
 		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_1_StartLiftingProcess);
 			break;
+		case eButton_start_lifting_pressed:
+			tran(eTR_eEpreuve_1_StartLiftingProcess);
+			break;
 		default:
 			break;
 	}
@@ -271,12 +279,17 @@ static void handle_eEpreuve_1_StartLiftingProcess_EntryFct(void) {
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
 	counter_1s = 0;
 	counter_30ms = 0;
+	counter_200ms = 0;
 	duty_cycle_in_percent = 0;
+	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 1);
 }
 
 static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
+			int16_t mm = RangingData.RangeMilliMeter;
+			int16_t cm_ganz = mm / 10;
+			int16_t cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
 			if(++counter_30ms >= TICK_COUNT_30ms)
 			{
 				if(duty_cycle_in_percent <= 100)
@@ -287,14 +300,23 @@ static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsType
 				counter_30ms = 0;
 			}
 
+			if(++counter_200ms >= 50){
+				HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0);
+				counter_200ms = 0;
+			}
+
+
+
 			if(++counter_1s >= 100)
 			{
-				int16_t mm = RangingData.RangeMilliMeter;
-				int16_t cm_ganz = mm / 10;
-				int16_t cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
+
 				snprintf(height_str, sizeof(height_str), "%d.%d cm", cm_ganz, cm_nachkomma);
 				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
 				counter_1s = 0;
+			}
+
+			if(cm_ganz < Schwellwert){
+				//tran(eTR_eEpreuve_1_StopLiftingProcess);
 			}
 			break;
 		case eRotaryEncoder_pressed:
@@ -316,13 +338,24 @@ static void handle_eEpreuve_1_StopLiftingProcess_EntryFct(void) {
 	HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
 	// actionneru schliessen -> stoppen der Masse
 	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, true);
+	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0);
+	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 1);
+	counter_200ms = 0;
+
 }
 
 static void handle_eEpreuve_1_StopLiftingProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
+			if(++counter_200ms >= 50){
+				HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
+				counter_200ms = 0;
+			}
 			break;
 		case eButton_start_descent_pressed:
+			tran(eTR_eEpreuve_1_LowerProcess);
+			break;
+		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_1_LowerProcess);
 			break;
 		default:
@@ -332,9 +365,15 @@ static void handle_eEpreuve_1_StopLiftingProcess(FSM_States_t state, EventsTypes
 
 // === eEpreuve_1_LowerProcess ===
 static void handle_eEpreuve_1_LowerProcess_EntryFct(void) {
+	SH1106_ClearDisplay();
+	SH1106_WriteString_AllAtOnce(0, 0, "Start Descent", FONT_6x8);
+	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
 	// actionneru öffen -> Masse herunterlassen
 	HAL_GPIO_WritePin(Actionneur_Left_GPIO_Port, Actionneur_Left_Pin, true);
 	counter_1s = 0;
+	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
+
+
 }
 
 static void handle_eEpreuve_1_LowerProcess(FSM_States_t state, EventsTypes_t event) {
@@ -697,8 +736,14 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
         last_state = new_state;
     }
 
-    if (GPIO_Pin == Rotary_Encoder_SW_Pin){
-    	EventsBuffer_addData(&myEventBuffer, eRotaryEncoder_pressed);
+    if (GPIO_Pin == Rotary_Encoder_SW_Pin)
+    {
+        uint32_t now = HAL_GetTick(); // Zeit in Millisekunden
+        if ((now - last_button_press_tick) > 200)  // 50 ms debounce-Zeit
+        {
+            last_button_press_tick = now;
+            EventsBuffer_addData(&myEventBuffer, eRotaryEncoder_pressed);
+        }
     }
 
     if (GPIO_Pin == ToF_interrupt_Pin){
@@ -706,8 +751,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     	 // Messdaten holen
     	 VL53L1_GetRangingMeasurementData(Dev, (VL53L1_RangingMeasurementData_t *) &RangingData);
     	 // Interrupt quittieren + neue Messung starten
-    	 VL53L1_ClearInterruptAndStartMeasurement(Dev);
-    	 //BSP_LED_Toggle(LED_BLUE);
+    	 //VL53L1_ClearInterruptAndStartMeasurement(Dev);
+    	 VL53L1_clear_interrupt(Dev);
+    	 BSP_LED_Toggle(LED_GREEN);
     }
 
     if (GPIO_Pin == Button_Stop_Pin){
