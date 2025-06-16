@@ -63,7 +63,10 @@ static uint16_t adc_buffer[ADC_BUFFER_SIZE];
 static float voltage_condesator;
 static uint8_t rotary_encoder_last_state;
 static uint16_t Schwellwert = 50;
-static uint32_t last_button_press_tick = 0;
+static uint32_t last_rotary_encoder_tick = 0;
+static uint32_t last_button_stop_tick = 0;
+static uint32_t last_button_lifting_tick = 0;
+static uint32_t last_button_descent_tick = 0;
 
 
 /*====================  STATIC FUNCTION PROTOTYPES  ====================*/
@@ -208,11 +211,7 @@ static void handle_eSelectEpreuve(FSM_States_t state, EventsTypes_t event) {
 static void handle_eEpreuve_1_EntryFct(void) {
 	selected_height_cm = 100;
 	SH1106_ClearDisplay();
-	if (currentEpreuve == eEpreuve_1){
-		SH1106_WriteString_AllAtOnce(0, 0, "Epreuve 1", FONT_6x8);
-	} else if(currentEpreuve == eEpreuve_2){
-		SH1106_WriteString_AllAtOnce(0, 0, "Epreuve 2", FONT_6x8);
-	}
+	SH1106_WriteString_AllAtOnce(0, 0, "Epreuve 1", FONT_6x8);
 	SH1106_WriteString_AllAtOnce(0, 2, "select height in cm:", FONT_6x8);
 	snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
 	SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
@@ -225,12 +224,12 @@ static void handle_eEpreuve_1(FSM_States_t state, EventsTypes_t event) {
 		case eRotaryEncoder_moved_left:
 			selected_height_cm = (selected_height_cm > 1) ? selected_height_cm - 1 : 175;
 			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+			SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 			break;
 		case eRotaryEncoder_moved_right:
 			selected_height_cm = (selected_height_cm < 175) ? selected_height_cm + 1 : 1;
 			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+			SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 			break;
 		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_1_ChargeEnergy);
@@ -400,9 +399,10 @@ static void handle_eEpreuve_1_LowerProcess(FSM_States_t state, EventsTypes_t eve
 static void handle_eEpreuve_2_EntryFct(void) {
 	selected_height_cm = 25;
 	SH1106_ClearDisplay();
-	SH1106_WriteString_AllAtOnce(0, 0, "select height in cm:", FONT_6x8);
+	SH1106_WriteString_AllAtOnce(0, 0, "Epreuve 2", FONT_6x8);
+	SH1106_WriteString_AllAtOnce(0, 2, "select height in cm:", FONT_6x8);
 	snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-	SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+	SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 }
 
 static void handle_eEpreuve_2(FSM_States_t state, EventsTypes_t event) {
@@ -412,12 +412,12 @@ static void handle_eEpreuve_2(FSM_States_t state, EventsTypes_t event) {
 		case eRotaryEncoder_moved_left:
 			selected_height_cm = (selected_height_cm > 25) ? selected_height_cm - 1 : 75;
 			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+			SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 			break;
 		case eRotaryEncoder_moved_right:
 			selected_height_cm = (selected_height_cm < 75) ? selected_height_cm + 1 : 25;
 			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+			SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 			break;
 		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_1_ChargeEnergy);
@@ -443,12 +443,12 @@ static void handle_eEpreuve_3(FSM_States_t state, EventsTypes_t event) {
 		case eRotaryEncoder_moved_left:
 			selected_height_cm = (selected_height_cm > 125) ? selected_height_cm - 1 : 170;
 			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+			SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 			break;
 		case eRotaryEncoder_moved_right:
 			selected_height_cm = (selected_height_cm < 170) ? selected_height_cm + 1 : 125;
 			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
-			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+			SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 			break;
 		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_3_ChargeEnergy);
@@ -739,9 +739,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     if (GPIO_Pin == Rotary_Encoder_SW_Pin)
     {
         uint32_t now = HAL_GetTick(); // Zeit in Millisekunden
-        if ((now - last_button_press_tick) > 200)  // 50 ms debounce-Zeit
+        if ((now - last_rotary_encoder_tick) > 200)  // 200 ms debounce-Zeit
         {
-            last_button_press_tick = now;
+            last_rotary_encoder_tick = now;
             EventsBuffer_addData(&myEventBuffer, eRotaryEncoder_pressed);
         }
     }
@@ -756,17 +756,35 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     	 BSP_LED_Toggle(LED_GREEN);
     }
 
-    if (GPIO_Pin == Button_Stop_Pin){
-    	EventsBuffer_addData(&myEventBuffer, eButton_stop_lifting_pressed);
+    if (GPIO_Pin == Button_Stop_Pin)
+    {
+        uint32_t now = HAL_GetTick();
+        if ((now - last_button_stop_tick) > 200)
+        {
+            last_button_stop_tick = now;
+            EventsBuffer_addData(&myEventBuffer, eButton_stop_lifting_pressed);
+        }
     }
 
-    if (GPIO_Pin == Button_Start_Lifting_Pin){
-		EventsBuffer_addData(&myEventBuffer, eButton_start_lifting_pressed);
+    if (GPIO_Pin == Button_Start_Lifting_Pin)
+    {
+        uint32_t now = HAL_GetTick();
+        if ((now - last_button_lifting_tick) > 200)
+        {
+            last_button_lifting_tick = now;
+            EventsBuffer_addData(&myEventBuffer, eButton_start_lifting_pressed);
+        }
     }
 
-    if (GPIO_Pin == Button_Start_Descent_Pin){
-    	EventsBuffer_addData(&myEventBuffer, eButton_start_descent_pressed);
-	}
+    if (GPIO_Pin == Button_Start_Descent_Pin)
+    {
+        uint32_t now = HAL_GetTick();
+        if ((now - last_button_descent_tick) > 200)
+        {
+            last_button_descent_tick = now;
+            EventsBuffer_addData(&myEventBuffer, eButton_start_descent_pressed);
+        }
+    }
 
 }
 
