@@ -68,6 +68,9 @@ static uint32_t last_button_stop_tick = 0;
 static uint32_t last_button_lifting_tick = 0;
 static uint32_t last_button_descent_tick = 0;
 
+VL53L1_DetectionConfig_t detectionConfig;
+
+
 
 /*====================  STATIC FUNCTION PROTOTYPES  ====================*/
 
@@ -75,7 +78,8 @@ static void tran(FSM_States_t newState);
 static void updateEpreuveDisplay(void);
 static void set_PWM_DutyCycle(uint32_t duty_cycle_in_percent);
 static void RotaryEncoder_Init(void);
-
+static void VL53L1_ConfigureFastMeasurement(VL53L1_DEV Dev) ;
+static void VL53L1_ConfigureLongRange(VL53L1_DEV Dev);
 
 
 
@@ -89,32 +93,41 @@ void application(void){
 
 
 
+	  HAL_GPIO_WritePin(Actionneur_Left_GPIO_Port, Actionneur_Left_Pin, 0);
+	  HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 0); //déblocke le systeme
+
+
+
 	 VL53L1_Error status;
 
 
 	 status = VL53L1_GetDeviceInfo(Dev, &deviceInfo);
 
-	 if (status == VL53L1_ERROR_NONE) {
+	 if (status != VL53L1_ERROR_NONE) {
 		 // connection success
-		 printf("Connection success\n");
-	 } else {
-		// no connection
-		 printf("No connection\n");
+		 BSP_LED_On(LED_RED);
 	 }
 
 	 // Sensor initialisieren
 	 status = VL53L1_DataInit(Dev);
 	 if (status != VL53L1_ERROR_NONE) {
-		 printf("DataInit fehlgeschlagen\n");
+		 BSP_LED_On(LED_RED);
 	 }
 
 	 status = VL53L1_StaticInit(Dev);   // Initialisiert die Register des Sensors
 	 if (status != VL53L1_ERROR_NONE) {
-		 printf("StaticInit fehlgeschlagen\n");
+		 BSP_LED_On(LED_RED);
 	 }
 
-	 VL53L1_SetDistanceMode(Dev, VL53L1_DISTANCEMODE_LONG);  // 1 = Short, 2 = Long
-	 VL53L1_SetMeasurementTimingBudgetMicroSeconds(Dev, 50000); // z.B. 50 ms
+
+
+	 //VL53L1_ConfigureFastMeasurement(Dev);
+	 VL53L1_ConfigureLongRange(Dev);
+
+	 /*
+	 //VL53L1_SetPresetMode(Dev, VL53L1_PRESETMODE_LITE_RANGING);
+	 VL53L1_SetDistanceMode(Dev, VL53L1_DISTANCEMODE_MEDIUM); // oder SHORT
+	 VL53L1_SetMeasurementTimingBudgetMicroSeconds(Dev, 500000); // 500 ms
 	 VL53L1_SetInterruptPolarity(Dev, VL53L1_DEVICEINTERRUPTPOLARITY_ACTIVE_LOW);
 	 VL53L1_set_GPIO_interrupt_config(
 		 Dev,
@@ -125,8 +138,12 @@ void application(void){
 		 0,                             // combined mode
 		 0, 0, 0, 0                     // Schwellenwerte
 	 );
+
+	 */
 	 VL53L1_StartMeasurement(Dev);
 	 //VL53L1_StopMeasurement(Dev);
+
+
 
 
 
@@ -174,6 +191,8 @@ static void handle_eSelectEpreuve_EntryFct(void) {
 	SH1106_WriteString_AllAtOnce(0,2,"-> Epreuve 1",FONT_6x8);
 	SH1106_WriteString_AllAtOnce(0,4,"   Epreuve 2",FONT_6x8);
 	SH1106_WriteString_AllAtOnce(0,6,"   Epreuve 3",FONT_6x8);
+	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0);
+	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 1);
 }
 
 static void handle_eSelectEpreuve(FSM_States_t state, EventsTypes_t event) {
@@ -215,6 +234,8 @@ static void handle_eEpreuve_1_EntryFct(void) {
 	SH1106_WriteString_AllAtOnce(0, 2, "select height in cm:", FONT_6x8);
 	snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
 	SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
+	HAL_GPIO_WritePin(Actionneur_Left_GPIO_Port, Actionneur_Left_Pin, 0);
+	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 0);
 }
 
 static void handle_eEpreuve_1(FSM_States_t state, EventsTypes_t event) {
@@ -280,7 +301,10 @@ static void handle_eEpreuve_1_StartLiftingProcess_EntryFct(void) {
 	counter_30ms = 0;
 	counter_200ms = 0;
 	duty_cycle_in_percent = 0;
+	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 1); //prepare pour lever
+	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
 	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 1);
+
 }
 
 static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsTypes_t event) {
@@ -289,7 +313,7 @@ static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsType
 			int16_t mm = RangingData.RangeMilliMeter;
 			int16_t cm_ganz = mm / 10;
 			int16_t cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
-			if(++counter_30ms >= TICK_COUNT_30ms)
+			if(++counter_30ms >= 5) // hier geändert (5s statt 3s)
 			{
 				if(duty_cycle_in_percent <= 100)
 				{
@@ -336,7 +360,7 @@ static void handle_eEpreuve_1_StopLiftingProcess_EntryFct(void) {
 	// stoppen des pwm für den boost converter
 	HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
 	// actionneru schliessen -> stoppen der Masse
-	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, true);
+	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 0); //prepare pour lever
 	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0);
 	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 1);
 	counter_200ms = 0;
@@ -366,10 +390,9 @@ static void handle_eEpreuve_1_StopLiftingProcess(FSM_States_t state, EventsTypes
 static void handle_eEpreuve_1_LowerProcess_EntryFct(void) {
 	SH1106_ClearDisplay();
 	SH1106_WriteString_AllAtOnce(0, 0, "Start Descent", FONT_6x8);
-	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
-	// actionneru öffen -> Masse herunterlassen
-	HAL_GPIO_WritePin(Actionneur_Left_GPIO_Port, Actionneur_Left_Pin, true);
 	counter_1s = 0;
+	// actionneru öffen -> Masse herunterlassen
+	HAL_GPIO_WritePin(Actionneur_Left_GPIO_Port, Actionneur_Left_Pin, 1);
 	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
 
 
@@ -747,9 +770,17 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     }
 
     if (GPIO_Pin == ToF_interrupt_Pin){
-    	EventsBuffer_addData(&myEventBuffer, eNewDistanzValue);
-    	 // Messdaten holen
-    	 VL53L1_GetRangingMeasurementData(Dev, (VL53L1_RangingMeasurementData_t *) &RangingData);
+    	VL53L1_GetRangingMeasurementData(Dev, (VL53L1_RangingMeasurementData_t *) &RangingData);
+
+
+    	 if (RangingData.RangeStatus == VL53L1_RANGESTATUS_RANGE_VALID) {
+    		 // Messdaten holen
+    		 EventsBuffer_addData(&myEventBuffer, eNewDistanzValue);
+    	    } else {
+    	    	uint16_t x = 0;
+    	    	x++;
+    	    }
+
     	 // Interrupt quittieren + neue Messung starten
     	 //VL53L1_ClearInterruptAndStartMeasurement(Dev);
     	 VL53L1_clear_interrupt(Dev);
@@ -816,3 +847,29 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         }
     }
 }
+
+static void VL53L1_ConfigureFastMeasurement(VL53L1_DEV Dev) {
+    // Abstandsmessung konfigurieren (ohne Wraparound-Probleme)
+    VL53L1_SetDistanceMode(Dev, VL53L1_DISTANCEMODE_SHORT);
+    VL53L1_SetMeasurementTimingBudgetMicroSeconds(Dev, 50000);  // 50 ms (guter Kompromiss)
+    VL53L1_SetInterMeasurementPeriodMilliSeconds(Dev, 60);      // > TimingBudget
+    VL53L1_SetInterruptPolarity(Dev, VL53L1_DEVICEINTERRUPTPOLARITY_ACTIVE_LOW);
+
+    VL53L1_set_GPIO_interrupt_config(Dev,
+        VL53L1_GPIOINTMODE_DISABLED,
+        VL53L1_GPIOINTMODE_DISABLED,
+        1, 0, 0, 0, 0, 0, 0);
+}
+
+static void VL53L1_ConfigureLongRange(VL53L1_DEV Dev) {
+    VL53L1_SetDistanceMode(Dev, VL53L1_DISTANCEMODE_LONG);
+    VL53L1_SetMeasurementTimingBudgetMicroSeconds(Dev, 330000);
+    VL53L1_SetInterMeasurementPeriodMilliSeconds(Dev, 350);
+    VL53L1_SetInterruptPolarity(Dev, VL53L1_DEVICEINTERRUPTPOLARITY_ACTIVE_LOW);
+
+    VL53L1_set_GPIO_interrupt_config(Dev,
+        VL53L1_GPIOINTMODE_DISABLED,
+        VL53L1_GPIOINTMODE_DISABLED,
+        1, 0, 0, 0, 0, 0, 0);
+}
+
