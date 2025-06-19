@@ -46,27 +46,39 @@ VL53L1_DEV Dev = &dev;
 VL53L1_DeviceInfo_t deviceInfo;
 VL53L1_Error status;
 
+
+/*====================  CONST VARIABLES  ====================*/
+const uint32_t hight_ToF_cm = 183;
+const uint32_t hight_Mass_cm = 6;
+const uint32_t total_Distanz_Tof_to_Mass_cm = hight_ToF_cm - hight_Mass_cm;
+
 /*====================  STATIC VARIABLES  ====================*/
 
 static FSM_States_t myState = eTR_eStart;
 static EventsBuffer_t myEventBuffer;
 static selected_Epreuve_t currentEpreuve;
 static uint32_t selected_height_cm;
-static char height_str[15];
+static char height_str[20];
+static char capa_voltage_str[10];
 static volatile VL53L1_RangingMeasurementData_t RangingData;
 static uint32_t duty_cycle_in_percent = 50;
 static uint16_t counter_30ms = 0;
 static uint16_t counter_1s = 0;
 static uint16_t counter_50ms = 0;
 static uint16_t counter_200ms = 0;
+static uint16_t counter_500ms = 0;
 static uint16_t adc_buffer[ADC_BUFFER_SIZE];
 static float voltage_condesator;
 static uint8_t rotary_encoder_last_state;
-static uint16_t Schwellwert = 50;
 static uint32_t last_rotary_encoder_tick = 0;
 static uint32_t last_button_stop_tick = 0;
 static uint32_t last_button_lifting_tick = 0;
 static uint32_t last_button_descent_tick = 0;
+static uint32_t threshold_mass_on_ground  = 175;
+static float 	threshold_Capacitor_empty = 1.0;
+static int16_t mm;
+static int16_t cm_ganz;
+static int16_t cm_nachkomma;
 
 VL53L1_DetectionConfig_t detectionConfig;
 
@@ -294,12 +306,12 @@ static void handle_eEpreuve_1_StartLiftingProcess_EntryFct(void) {
 	SH1106_ClearDisplay();
 	SH1106_WriteString_AllAtOnce(0, 0, "Lifting Process", FONT_6x8);
 	// Duty Cycle setzen (Buck langsam starten)
-	set_PWM_DutyCycle(DUTY_CYCLE_0_Percent);
+	//set_PWM_DutyCycle(DUTY_CYCLE_0_Percent);
 	// Start PWM
-	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+	//HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
 	counter_1s = 0;
 	counter_30ms = 0;
-	counter_200ms = 0;
+	counter_500ms = 0;
 	duty_cycle_in_percent = 0;
 	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 1); //prepare pour lever
 	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
@@ -310,10 +322,10 @@ static void handle_eEpreuve_1_StartLiftingProcess_EntryFct(void) {
 static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
-			int16_t mm = RangingData.RangeMilliMeter;
-			int16_t cm_ganz = mm / 10;
-			int16_t cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
-			if(++counter_30ms >= 5) // hier geändert (5s statt 3s)
+			mm = RangingData.RangeMilliMeter;
+			cm_ganz = mm / 10;
+			cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
+			/*if(++counter_30ms >= 5) // hier geändert (5s statt 3s)
 			{
 				if(duty_cycle_in_percent <= 100)
 				{
@@ -321,27 +333,32 @@ static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsType
 					set_PWM_DutyCycle(duty_cycle_in_percent);
 				}
 				counter_30ms = 0;
-			}
+			}*/
 
-			if(++counter_200ms >= 50){
-				HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0);
-				counter_200ms = 0;
+			if(++counter_500ms >= 50){
+				HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0); // relay braucht nur kurzen impuls
+				counter_500ms = 0;
 			}
 
 
 
 			if(++counter_1s >= 100)
 			{
-
 				snprintf(height_str, sizeof(height_str), "%d.%d cm", cm_ganz, cm_nachkomma);
 				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
 				counter_1s = 0;
 			}
 
-			if(cm_ganz < Schwellwert){
-				//tran(eTR_eEpreuve_1_StopLiftingProcess);
-			}
+
 			break;
+		case eNewDistanzValue:
+			mm = RangingData.RangeMilliMeter;
+			cm_ganz = mm / 10;
+			/*if(cm_ganz <= total_Distanz_Tof_to_Mass_cm - selected_height_cm){
+			tran(eTR_eEpreuve_1_StopLiftingProcess);
+			}*/
+			break;
+
 		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_1_StopLiftingProcess);
 			break;
@@ -358,7 +375,7 @@ static void handle_eEpreuve_1_StopLiftingProcess_EntryFct(void) {
 	SH1106_ClearDisplay();
 	SH1106_WriteString_AllAtOnce(0, 0, "Stop Lifting", FONT_6x8);
 	// stoppen des pwm für den boost converter
-	HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
+	//HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
 	// actionneru schliessen -> stoppen der Masse
 	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 0); //prepare pour lever
 	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0);
@@ -402,13 +419,20 @@ static void handle_eEpreuve_1_LowerProcess(FSM_States_t state, EventsTypes_t eve
 	switch(event){
 		case eTimeTickElapsed_10ms:
 			if(++counter_1s >= 100){
-				int16_t mm = RangingData.RangeMilliMeter;
-				int16_t cm_ganz = mm / 10;
-				int16_t cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
+				mm = RangingData.RangeMilliMeter;
+				cm_ganz = mm / 10;
+				cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
 				snprintf(height_str, sizeof(height_str), "%d.%d cm", cm_ganz, cm_nachkomma);
 				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
 				counter_1s = 0;
 				}
+			break;
+		case eNewDistanzValue:
+			mm = RangingData.RangeMilliMeter;
+			cm_ganz = mm / 10;
+			/*if(cm_ganz > threshold_mass_on_ground){
+				tran(eTR_eSelectEpreuve);
+			}*/
 			break;
 		case eRotaryEncoder_pressed:
 			tran(eTR_eSelectEpreuve);
@@ -451,7 +475,7 @@ static void handle_eEpreuve_2(FSM_States_t state, EventsTypes_t event) {
 
 // === eEpreuve_3 ===
 static void handle_eEpreuve_3_EntryFct(void) {
-	selected_height_cm = 125;
+	selected_height_cm = 175-hight_Mass_cm;
 	SH1106_ClearDisplay();
 	SH1106_WriteString_AllAtOnce(0, 0, "Epreuve 3", FONT_6x8);
 	SH1106_WriteString_AllAtOnce(0, 2, "select height in cm:", FONT_6x8);
@@ -485,6 +509,10 @@ static void handle_eEpreuve_3(FSM_States_t state, EventsTypes_t event) {
 static void handle_eEpreuve_3_ChargeEnergy_EntryFct(void) {
 	SH1106_ClearDisplay();
 	SH1106_WriteString_AllAtOnce(0, 0, "Charge Energy", FONT_6x8);
+
+	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 1); //prepare pour lever
+	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
+	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 1);
 }
 
 static void handle_eEpreuve_3_ChargeEnergy(FSM_States_t state, EventsTypes_t event) {
@@ -507,18 +535,22 @@ static void handle_eEpreuve_3_StartLiftingProcess_EntryFct(void) {
 	SH1106_ClearDisplay();
 	SH1106_WriteString_AllAtOnce(0, 0, "Lifting Process", FONT_6x8);
 	// Duty Cycle setzen (Buck langsam starten)
-	set_PWM_DutyCycle(DUTY_CYCLE_0_Percent);
+	//set_PWM_DutyCycle(DUTY_CYCLE_0_Percent);
 	// Start PWM
-	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+	//HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 0); //prepare pour lever
+	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0);
+	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 1);
+	counter_200ms = 0;
 	counter_1s = 0;
-	counter_30ms = 0;
-	duty_cycle_in_percent = 0;
+	//counter_30ms = 0;
+	//duty_cycle_in_percent = 0;
 }
 
 static void handle_eEpreuve_3_StartLiftingProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
-			if(++counter_30ms >= TICK_COUNT_30ms)
+			/*if(++counter_30ms >= TICK_COUNT_30ms)
 			{
 				if(duty_cycle_in_percent <= 100)
 				{
@@ -526,17 +558,34 @@ static void handle_eEpreuve_3_StartLiftingProcess(FSM_States_t state, EventsType
 					set_PWM_DutyCycle(duty_cycle_in_percent);
 				}
 				counter_30ms = 0;
+			}*/
+
+			if(++counter_200ms >= 50){
+				HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
+				counter_200ms = 0;
 			}
 
 			if(++counter_1s >= 100)
 			{
-				int16_t mm = RangingData.RangeMilliMeter;
-				int16_t cm_ganz = mm / 10;
-				int16_t cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
+				mm = RangingData.RangeMilliMeter;
+				cm_ganz = mm / 10;
+				cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
 				snprintf(height_str, sizeof(height_str), "%d.%d cm", cm_ganz, cm_nachkomma);
 				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
 				counter_1s = 0;
 			}
+			break;
+		case eNewDistanzValue:
+			mm = RangingData.RangeMilliMeter;
+			cm_ganz = mm / 10;
+			/*if(cm_ganz <= total_Distanz_Tof_to_Mass_cm - selected_height_cm){
+			tran(eTR_eEpreuve_1_StopLiftingProcess);
+			}*/
+			break;
+		case eNewVoltagemeasured:
+			/*if(voltage_condesator < threshold_Capacitor_empty){
+				tran(eTR_eEpreuve_3_StopLiftingProcess);
+			}*/
 			break;
 		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_3_StopLiftingProcess);
@@ -554,9 +603,9 @@ static void handle_eEpreuve_3_StopLiftingProcess_EntryFct(void) {
 	SH1106_ClearDisplay();
 	SH1106_WriteString_AllAtOnce(0, 0, "Stop Lifting", FONT_6x8);
 	// stoppen des pwm für den boost converter
-	HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
+	//HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
 	// actionneru schliessen -> stoppen der Masse
-	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, true);
+
 }
 
 static void handle_eEpreuve_3_StopLiftingProcess(FSM_States_t state, EventsTypes_t event) {
