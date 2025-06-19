@@ -65,7 +65,6 @@ static uint32_t duty_cycle_in_percent = 50;
 static uint16_t counter_30ms = 0;
 static uint16_t counter_1s = 0;
 static uint16_t counter_50ms = 0;
-static uint16_t counter_200ms = 0;
 static uint16_t counter_500ms = 0;
 static uint16_t adc_buffer[ADC_BUFFER_SIZE];
 static float voltage_condesator;
@@ -102,12 +101,6 @@ void application(void){
 	  RotaryEncoder_Init();
 
 	  dev.i2c_slave_address = 0x29;
-
-
-
-	  HAL_GPIO_WritePin(Actionneur_Left_GPIO_Port, Actionneur_Left_Pin, 0);
-	  HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 0); //déblocke le systeme
-
 
 
 	 VL53L1_Error status;
@@ -313,6 +306,7 @@ static void handle_eEpreuve_1_StartLiftingProcess_EntryFct(void) {
 	counter_30ms = 0;
 	counter_500ms = 0;
 	duty_cycle_in_percent = 0;
+	HAL_GPIO_WritePin(Actionneur_Left_GPIO_Port, Actionneur_Left_Pin, 0);
 	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 1); //prepare pour lever
 	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
 	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 1);
@@ -380,16 +374,16 @@ static void handle_eEpreuve_1_StopLiftingProcess_EntryFct(void) {
 	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 0); //prepare pour lever
 	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0);
 	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 1);
-	counter_200ms = 0;
+	counter_500ms = 0;
 
 }
 
 static void handle_eEpreuve_1_StopLiftingProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
-			if(++counter_200ms >= 50){
+			if(++counter_500ms >= 50){
 				HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
-				counter_200ms = 0;
+				counter_500ms = 0;
 			}
 			break;
 		case eButton_start_descent_pressed:
@@ -538,11 +532,14 @@ static void handle_eEpreuve_3_StartLiftingProcess_EntryFct(void) {
 	//set_PWM_DutyCycle(DUTY_CYCLE_0_Percent);
 	// Start PWM
 	//HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 0); //prepare pour lever
-	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0);
-	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 1);
-	counter_200ms = 0;
+	HAL_GPIO_WritePin(Actionneur_Left_GPIO_Port,Actionneur_Left_Pin,0);
+	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 1); //prepare pour lever
+	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
+	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 1);
+	counter_500ms = 0;
 	counter_1s = 0;
+
+
 	//counter_30ms = 0;
 	//duty_cycle_in_percent = 0;
 }
@@ -560,9 +557,9 @@ static void handle_eEpreuve_3_StartLiftingProcess(FSM_States_t state, EventsType
 				counter_30ms = 0;
 			}*/
 
-			if(++counter_200ms >= 50){
-				HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
-				counter_200ms = 0;
+			if(++counter_500ms >= 50){
+				HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0); // relay braucht nur kurzen impuls
+				counter_500ms = 0;
 			}
 
 			if(++counter_1s >= 100)
@@ -590,7 +587,7 @@ static void handle_eEpreuve_3_StartLiftingProcess(FSM_States_t state, EventsType
 		case eRotaryEncoder_pressed:
 			tran(eTR_eEpreuve_3_StopLiftingProcess);
 			break;
-		case eButton_start_lifting_pressed:
+		case eButton_stop_lifting_pressed:
 			tran(eTR_eEpreuve_3_StopLiftingProcess);
 			break;
 		default:
@@ -605,15 +602,20 @@ static void handle_eEpreuve_3_StopLiftingProcess_EntryFct(void) {
 	// stoppen des pwm für den boost converter
 	//HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
 	// actionneru schliessen -> stoppen der Masse
+	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 0); //prepare pour lever
+	HAL_GPIO_WritePin(Relay_On_GPIO_Port, Relay_On_Pin, 0);
+	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 1);
+	counter_500ms = 0;
 
 }
 
 static void handle_eEpreuve_3_StopLiftingProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
-			break;
-		case eButton_stop_lifting_pressed:
-
+			if(++counter_500ms >= 50){
+				HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
+				counter_500ms = 0;
+			}
 			break;
 		case eButton_start_descent_pressed:
 			tran(eTR_eEpreuve_3_LowerProcess);
@@ -625,12 +627,39 @@ static void handle_eEpreuve_3_StopLiftingProcess(FSM_States_t state, EventsTypes
 
 // === eEpreuve_3_LowerProcess ===
 static void handle_eEpreuve_3_LowerProcess_EntryFct(void) {
-
+	SH1106_ClearDisplay();
+	SH1106_WriteString_AllAtOnce(0, 0, "Start Descent", FONT_6x8);
+	counter_1s = 0;
+	// actionneru öffen -> Masse herunterlassen
+	HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 0);
+	HAL_GPIO_WritePin(Actionneur_Left_GPIO_Port, Actionneur_Left_Pin, 1);
+	HAL_GPIO_WritePin(Relay_Off_GPIO_Port, Relay_Off_Pin, 0);
 }
 
 static void handle_eEpreuve_3_LowerProcess(FSM_States_t state, EventsTypes_t event) {
 	switch(event){
 		case eTimeTickElapsed_10ms:
+			if(++counter_1s >= 100){
+			mm = RangingData.RangeMilliMeter;
+			cm_ganz = mm / 10;
+			cm_nachkomma = abs(mm % 10);  // Vorzeichenfrei für Anzeige
+			snprintf(height_str, sizeof(height_str), "%d.%d cm", cm_ganz, cm_nachkomma);
+			SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
+			counter_1s = 0;
+			}
+			break;
+		case eNewDistanzValue:
+			mm = RangingData.RangeMilliMeter;
+			cm_ganz = mm / 10;
+			/*if(cm_ganz > threshold_mass_on_ground){
+				tran(eTR_eEpreuve_3_StartLiftingProcess);
+			}*/
+			break;
+		case eButton_start_lifting_pressed:
+			tran(eTR_eEpreuve_3_StartLiftingProcess);
+			break;
+		case eRotaryEncoder_pressed:
+			tran(eTR_eSelectEpreuve);
 			break;
 		default:
 			break;
