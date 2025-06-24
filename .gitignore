@@ -1,4 +1,12 @@
-# Build output
+# === KEEP these for CubeIDE to function ===
+!.project
+!.cproject
+!*.ioc
+!.mxproject
+!/.settings/
+!*.launch
+ 
+# === Build output ===
 /Debug/
 /Release/
 *.bin
@@ -6,24 +14,15 @@
 *.map
 *.hex
 *.list
-
-# CubeIDE project settings
-.cproject
-.launches/
-/.ipc
-.build
+.build/
 *.log
-
-# Backup and temp files
+ 
+# === Backup & temp ===
 *~
 *.swp
 *.bak
 *.tmp
-
-# IDE settings (optional)
-/.settings/
-.metadata/
-
-# OS-specific
+ 
+# === OS-specific ===
 .DS_Store
 Thumbs.db

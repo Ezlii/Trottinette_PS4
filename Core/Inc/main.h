@@ -72,10 +72,10 @@ void Error_Handler(void);
 #define Activate_Display_GPIO_Port GPIOB
 #define Data_Command_Pin GPIO_PIN_9
 #define Data_Command_GPIO_Port GPIOB
-#define Relay_On_Pin GPIO_PIN_3
-#define Relay_On_GPIO_Port GPIOC
-#define Relay_Off_Pin GPIO_PIN_0
-#define Relay_Off_GPIO_Port GPIOA
+#define Relay_Off_Pin GPIO_PIN_3
+#define Relay_Off_GPIO_Port GPIOC
+#define Relay_On_Pin GPIO_PIN_0
+#define Relay_On_GPIO_Port GPIOA
 #define Actionneur_Right_Pin GPIO_PIN_1
 #define Actionneur_Right_GPIO_Port GPIOA
 #define Rotary_Encoder_SCK_Pin GPIO_PIN_2
@@ -87,6 +87,8 @@ void Error_Handler(void);
 #define Rotary_Encoder_SW_Pin GPIO_PIN_5
 #define Rotary_Encoder_SW_GPIO_Port GPIOC
 #define Rotary_Encoder_SW_EXTI_IRQn EXTI9_5_IRQn
+#define masse_on_ground_Pin GPIO_PIN_11
+#define masse_on_ground_GPIO_Port GPIOB
 #define Button_Start_Lifting_Pin GPIO_PIN_12
 #define Button_Start_Lifting_GPIO_Port GPIOB
 #define Button_Start_Lifting_EXTI_IRQn EXTI15_10_IRQn

@@ -521,10 +521,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOB, Activate_Display_Pin|Data_Command_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, Relay_On_Pin|Actionneur_Left_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, Relay_Off_Pin|Actionneur_Left_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, Relay_Off_Pin|Actionneur_Right_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, Relay_On_Pin|Actionneur_Right_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : Activate_Display_Pin Data_Command_Pin */
   GPIO_InitStruct.Pin = Activate_Display_Pin|Data_Command_Pin;
@@ -533,15 +533,15 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Relay_On_Pin Actionneur_Left_Pin */
-  GPIO_InitStruct.Pin = Relay_On_Pin|Actionneur_Left_Pin;
+  /*Configure GPIO pins : Relay_Off_Pin Actionneur_Left_Pin */
+  GPIO_InitStruct.Pin = Relay_Off_Pin|Actionneur_Left_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Relay_Off_Pin Actionneur_Right_Pin */
-  GPIO_InitStruct.Pin = Relay_Off_Pin|Actionneur_Right_Pin;
+  /*Configure GPIO pins : Relay_On_Pin Actionneur_Right_Pin */
+  GPIO_InitStruct.Pin = Relay_On_Pin|Actionneur_Right_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -558,6 +558,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : masse_on_ground_Pin */
+  GPIO_InitStruct.Pin = masse_on_ground_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(masse_on_ground_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : Button_Start_Lifting_Pin Button_Start_Descent_Pin */
   GPIO_InitStruct.Pin = Button_Start_Lifting_Pin|Button_Start_Descent_Pin;

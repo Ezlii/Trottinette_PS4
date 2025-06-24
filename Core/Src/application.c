@@ -106,6 +106,10 @@ void application(void){
 	 VL53L1_Error status;
 
 
+
+
+
+
 	 status = VL53L1_GetDeviceInfo(Dev, &deviceInfo);
 
 	 if (status != VL53L1_ERROR_NONE) {
@@ -248,16 +252,19 @@ static void handle_eEpreuve_1(FSM_States_t state, EventsTypes_t event) {
 		case eTimeTickElapsed_10ms:
 			break;
 		case eRotaryEncoder_moved_left:
-			selected_height_cm = (selected_height_cm > 1) ? selected_height_cm - 1 : 175;
+			selected_height_cm = (selected_height_cm > 1) ? selected_height_cm - 1 : 190;
 			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
 			SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 			break;
 		case eRotaryEncoder_moved_right:
-			selected_height_cm = (selected_height_cm < 175) ? selected_height_cm + 1 : 1;
+			selected_height_cm = (selected_height_cm < 190) ? selected_height_cm + 1 : 1;
 			snprintf(height_str, sizeof(height_str), "%3ld cm", selected_height_cm);
 			SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 			break;
 		case eRotaryEncoder_pressed:
+			//tran(eTR_eEpreuve_1_ChargeEnergy);
+			break;
+		case eButton_start_lifting_pressed:
 			tran(eTR_eEpreuve_1_ChargeEnergy);
 			break;
 		default:
@@ -284,7 +291,7 @@ static void handle_eEpreuve_1_ChargeEnergy(FSM_States_t state, EventsTypes_t eve
 			}*/
 			break;
 		case eRotaryEncoder_pressed:
-			tran(eTR_eEpreuve_1_StartLiftingProcess);
+			//tran(eTR_eEpreuve_1_StartLiftingProcess);
 			break;
 		case eButton_start_lifting_pressed:
 			tran(eTR_eEpreuve_1_StartLiftingProcess);
@@ -348,13 +355,12 @@ static void handle_eEpreuve_1_StartLiftingProcess(FSM_States_t state, EventsType
 		case eNewDistanzValue:
 			mm = RangingData.RangeMilliMeter;
 			cm_ganz = mm / 10;
-			/*if(cm_ganz <= total_Distanz_Tof_to_Mass_cm - selected_height_cm){
+			if(cm_ganz <= (190 - selected_height_cm)){
 			tran(eTR_eEpreuve_1_StopLiftingProcess);
-			}*/
+			}
 			break;
-
 		case eRotaryEncoder_pressed:
-			tran(eTR_eEpreuve_1_StopLiftingProcess);
+			//tran(eTR_eEpreuve_1_StopLiftingProcess);
 			break;
 		case eButton_stop_lifting_pressed:
 			tran(eTR_eEpreuve_1_StopLiftingProcess);
@@ -390,7 +396,7 @@ static void handle_eEpreuve_1_StopLiftingProcess(FSM_States_t state, EventsTypes
 			tran(eTR_eEpreuve_1_LowerProcess);
 			break;
 		case eRotaryEncoder_pressed:
-			tran(eTR_eEpreuve_1_LowerProcess);
+			//tran(eTR_eEpreuve_1_LowerProcess);
 			break;
 		default:
 			break;
@@ -420,6 +426,11 @@ static void handle_eEpreuve_1_LowerProcess(FSM_States_t state, EventsTypes_t eve
 				SH1106_WriteString_AllAtOnce(0, 2, height_str, FONT_6x8);
 				counter_1s = 0;
 				}
+			if(HAL_GPIO_ReadPin(masse_on_ground_GPIO_Port, masse_on_ground_Pin) == 1){
+				HAL_GPIO_WritePin(Actionneur_Left_GPIO_Port, Actionneur_Left_Pin, 0);
+				HAL_GPIO_WritePin(Actionneur_Right_GPIO_Port, Actionneur_Right_Pin, 0);
+				tran(eTR_eSelectEpreuve);
+			}
 			break;
 		case eNewDistanzValue:
 			mm = RangingData.RangeMilliMeter;
@@ -429,6 +440,9 @@ static void handle_eEpreuve_1_LowerProcess(FSM_States_t state, EventsTypes_t eve
 			}*/
 			break;
 		case eRotaryEncoder_pressed:
+			//tran(eTR_eSelectEpreuve);
+			break;
+		case eButton_start_lifting_pressed:
 			tran(eTR_eSelectEpreuve);
 			break;
 		default:
@@ -461,7 +475,12 @@ static void handle_eEpreuve_2(FSM_States_t state, EventsTypes_t event) {
 			SH1106_WriteString_AllAtOnce(0, 4, height_str, FONT_6x8);
 			break;
 		case eRotaryEncoder_pressed:
+			//
 			tran(eTR_eEpreuve_1_ChargeEnergy);
+			break;
+		case eButton_start_lifting_pressed:
+			tran(eTR_eEpreuve_1_ChargeEnergy);
+			break;
 		default:
 			break;
 	}
@@ -840,7 +859,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     if (GPIO_Pin == Rotary_Encoder_SW_Pin)
     {
         uint32_t now = HAL_GetTick(); // Zeit in Millisekunden
-        if ((now - last_rotary_encoder_tick) > 200)  // 200 ms debounce-Zeit
+        if ((now - last_rotary_encoder_tick) > 500)  // 200 ms debounce-Zeit
         {
             last_rotary_encoder_tick = now;
             EventsBuffer_addData(&myEventBuffer, eRotaryEncoder_pressed);
@@ -868,7 +887,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     if (GPIO_Pin == Button_Stop_Pin)
     {
         uint32_t now = HAL_GetTick();
-        if ((now - last_button_stop_tick) > 200)
+        if ((now - last_button_stop_tick) > 500)
         {
             last_button_stop_tick = now;
             EventsBuffer_addData(&myEventBuffer, eButton_stop_lifting_pressed);
@@ -878,7 +897,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     if (GPIO_Pin == Button_Start_Lifting_Pin)
     {
         uint32_t now = HAL_GetTick();
-        if ((now - last_button_lifting_tick) > 200)
+        if ((now - last_button_lifting_tick) > 500)
         {
             last_button_lifting_tick = now;
             EventsBuffer_addData(&myEventBuffer, eButton_start_lifting_pressed);
@@ -888,7 +907,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     if (GPIO_Pin == Button_Start_Descent_Pin)
     {
         uint32_t now = HAL_GetTick();
-        if ((now - last_button_descent_tick) > 200)
+        if ((now - last_button_descent_tick) > 500)
         {
             last_button_descent_tick = now;
             EventsBuffer_addData(&myEventBuffer, eButton_start_descent_pressed);
@@ -941,8 +960,8 @@ static void VL53L1_ConfigureFastMeasurement(VL53L1_DEV Dev) {
 
 static void VL53L1_ConfigureLongRange(VL53L1_DEV Dev) {
     VL53L1_SetDistanceMode(Dev, VL53L1_DISTANCEMODE_LONG);
-    VL53L1_SetMeasurementTimingBudgetMicroSeconds(Dev, 330000);
-    VL53L1_SetInterMeasurementPeriodMilliSeconds(Dev, 350);
+    //VL53L1_SetMeasurementTimingBudgetMicroSeconds(Dev, 330000);
+    //cVL53L1_SetInterMeasurementPeriodMilliSeconds(Dev, 350);
     VL53L1_SetInterruptPolarity(Dev, VL53L1_DEVICEINTERRUPTPOLARITY_ACTIVE_LOW);
 
     VL53L1_set_GPIO_interrupt_config(Dev,
